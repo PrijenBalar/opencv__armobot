@@ -7,6 +7,7 @@ import utime
 import json
 import gc
 
+delay = 300
 # Import DNS Server for captive portal
 try:
     from microDNSSrv import MicroDNSSrv
@@ -37,13 +38,13 @@ def set_angle(angle):
 # Stepper parameters
 maxDegree1 = 175.0
 minDegree1 = -175.0
-maxPulse1 = 15500
+maxPulse1 = 3875
 
 minDegree2 = -30.0
 maxDegree2 = 110.0
-degreeToPulseRatio2 = 10500.0 / 90.0
+degreeToPulseRatio2 = 2625.0 / 90.0
 
-pulsesPerDegree3 = 10000.0 / 90.0
+pulsesPerDegree3 = 2500.0 / 90.0
 minDegree3 = -90.0
 maxDegree3 = 80.0
 
@@ -152,9 +153,9 @@ def step_motor(steps, dirPin, pulPin, direction):
     dirPin.value(1 if direction else 0)
     for _ in range(steps):
         pulPin.value(1)
-        time.sleep_us(200)
+        time.sleep_us(delay)
         pulPin.value(0)
-        time.sleep_us(200)
+        time.sleep_us(delay)
 
 
 def move_stepper1(target_degree):
@@ -198,12 +199,12 @@ def move_stepper3(target_degree):
 
 def gripper_open():
     set_angle(0)
-    utime.sleep_ms(700)
+    utime.sleep_ms(500)
 
 
 def gripper_close():
     set_angle(85)
-    utime.sleep_ms(700)
+    utime.sleep_ms(500)
 
 
 def gripper_stop():
@@ -225,9 +226,9 @@ def calibrate_steppers():
     dirPin3.value(1)
 
     maxDegree1_local = 175.0
-    maxPulse1_local = 15500
-    degreeToPulseRatio2_local = 10500.0 / 90.0
-    degreeToPulseRatio3_local = 10000.0 / 90.0
+    maxPulse1_local = 3875
+    degreeToPulseRatio2_local = 2625.0 / 90.0
+    degreeToPulseRatio3_local = 2500.0 / 90.0
 
     phase1 = "forward"
     phase2 = "backward"
@@ -255,13 +256,13 @@ def calibrate_steppers():
                     steps_1_back_done = 0
                 elif time.ticks_diff(now, last_step_time_1) >= pulse_delay_1:
                     pulPin1.value(1)
-                    time.sleep_us(300)
+                    time.sleep_us(delay)
                     pulPin1.value(0)
                     last_step_time_1 = now
             elif phase1 == "backward" and steps_1_back_done < target_steps_1_back:
                 if time.ticks_diff(now, last_step_time_1) >= pulse_delay_1:
                     pulPin1.value(1)
-                    time.sleep_us(300)
+                    time.sleep_us(delay)
                     pulPin1.value(0)
                     steps_1_back_done += 1
                     last_step_time_1 = now
@@ -277,13 +278,13 @@ def calibrate_steppers():
                     steps_2_forward_done = 0
                 elif time.ticks_diff(now, last_step_time_2) >= pulse_delay_2:
                     pulPin2.value(1)
-                    time.sleep_us(100)
+                    time.sleep_us(delay)
                     pulPin2.value(0)
                     last_step_time_2 = now
             elif phase2 == "forward" and steps_2_forward_done < target_steps_2_forward:
                 if time.ticks_diff(now, last_step_time_2) >= 400:
                     pulPin2.value(1)
-                    time.sleep_us(100)
+                    time.sleep_us(delay)
                     pulPin2.value(0)
                     steps_2_forward_done += 1
                     last_step_time_2 = now
@@ -298,13 +299,13 @@ def calibrate_steppers():
                     steps_3_forward_done = 0
                 elif time.ticks_diff(now, last_step_time_3) >= pulse_delay_3:
                     pulPin3.value(1)
-                    time.sleep_us(200)
+                    time.sleep_us(delay)
                     pulPin3.value(0)
                     last_step_time_3 = now
             elif phase3 == "forward" and steps_3_forward_done < target_steps_3_forward:
                 if time.ticks_diff(now, last_step_time_3) >= 400:
                     pulPin3.value(1)
-                    time.sleep_us(200)
+                    time.sleep_us(delay)
                     pulPin3.value(0)
                     steps_3_forward_done += 1
                     last_step_time_3 = now

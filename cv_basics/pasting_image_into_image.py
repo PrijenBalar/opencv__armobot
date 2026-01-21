@@ -9,7 +9,7 @@ print("FRAME SHAPE :",width,height)
 frame = frame[105:-60,100:-135]
 
 
-memeImage = cv2.imread("stonks.jpg")
+memeImage = cv2.imread("images/stonks.jpg")
 memeImage = cv2.resize(memeImage,(150,100))
 memeHeight,memeWidth,memeDepth = memeImage.shape
 print("MEME SHAPE :",memeWidth,memeHeight)

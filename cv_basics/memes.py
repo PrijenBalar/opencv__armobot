@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 #loading the image
-image = cv2.imread("blinking_guy.jpg")
+image = cv2.imread("images/blinking_guy.jpg")
 print(image.shape)
 
 #seting the opencv window

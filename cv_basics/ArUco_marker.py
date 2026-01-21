@@ -12,7 +12,7 @@ parameters = aruco.DetectorParameters()
 detector = aruco.ArucoDetector(aruco_dict, parameters)
 
 # ===================== CAMERA =====================
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 
 # ===================== MARKER INFO =====================
 MARKER_SIZE_M = 0.053 # marker size in METERS (5 cm)
