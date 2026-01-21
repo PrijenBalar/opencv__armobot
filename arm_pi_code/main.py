@@ -21,18 +21,51 @@ except:
 AP_SSID = 'RoboticArm_AP'
 AP_PASSWORD = '12345678'
 
-# --- Servo Configuration ---
-SERVO_PIN = 21
-servo = machine.PWM(machine.Pin(SERVO_PIN))
-servo.freq(50)
 
-MIN_DUTY = 1638
-MAX_DUTY = 8192
+class Gripper:
+    def __init__(self):
+        # --- Servo Configuration ---
+        SERVO_PIN = 21
+        self.servo = machine.PWM(machine.Pin(SERVO_PIN))
+        self.servo.freq(50)
+
+        self.MIN_DUTY = 1638
+        self.MAX_DUTY = 8192
+
+    def set_angle(self, angle):
+        duty = int((angle / 180) * (self.MAX_DUTY - self.MIN_DUTY) + self.MIN_DUTY)
+        self.servo.duty_u16(duty)
+
+    def open(self):
+        self.set_angle(0)
+        utime.sleep_ms(500)
+
+    def close(self):
+        self.set_angle(85)
+        utime.sleep_ms(500)
 
 
-def set_angle(angle):
-    duty = int((angle / 180) * (MAX_DUTY - MIN_DUTY) + MIN_DUTY)
-    servo.duty_u16(duty)
+class Joint:
+    def __init__(self, dir, pulse, maxDegree, minDegree, maxPulse, degreeToPulseRatio , delay=delay):
+        self.dirPin = Pin(dir, Pin.OUT)
+        self.pulsePin = Pin(pulse, Pin.OUT)
+        self.maxDegree = maxDegree
+        self.minDegree = minDegree
+        self.degreeToPulseRatio = degreeToPulseRatio
+        self.maxPulse = maxPulse
+        self.currentDegree = 0
+
+        # 🔹 Non-blocking state
+        self.steps_remaining = 0
+        self.direction = 1
+        self.last_step_time = time.ticks_us()
+        self.delay = delay
+
+    def jointDir(self, value):
+        self.dirPin.value(value)
+
+    def jointPul(self, value):
+        self.pulsePin.value(value)
 
 
 # Stepper parameters
@@ -48,15 +81,8 @@ pulsesPerDegree3 = 2500.0 / 90.0
 minDegree3 = -90.0
 maxDegree3 = 80.0
 
-currentDegree1 = 0.0
-currentDegree2 = 0.0
-currentDegree3 = 0.0
-
-saved_movement_1 = None
-saved_movement_2 = None
-
-defalt_p1 = [-25.0, 39.0, -14.0]
-defalt_p2 = [-70.0, 39.0, -14.0]
+saved_movement_1 = []
+saved_movement_2 = []
 
 min_s2 = -20
 max_s2 = 70
@@ -149,94 +175,55 @@ def create_access_point():
     return ap
 
 
-def step_motor(steps, dirPin, pulPin, direction):
-    dirPin.value(1 if direction else 0)
-    for _ in range(steps):
-        pulPin.value(1)
-        time.sleep_us(delay)
-        pulPin.value(0)
-        time.sleep_us(delay)
 
 
-def move_stepper1(target_degree):
-    global currentDegree1
-    target_degree = max(min(target_degree, maxDegree1), minDegree1)
-    degree_delta = target_degree - currentDegree1
-    pulse_delta = int((degree_delta / maxDegree1) * maxPulse1)
+def stepper_update(joint: Joint):
+    if joint.steps_remaining <= 0:
+        return
+
+    now = time.ticks_us()
+    if time.ticks_diff(now, joint.last_step_time) >= joint.delay:
+        joint.dirPin.value(joint.direction)
+        joint.pulsePin.value(1)
+        time.sleep_us(5)          # tiny pulse width
+        joint.pulsePin.value(0)
+
+        joint.steps_remaining -= 1
+        joint.last_step_time = now
+
+
+def move_stepper(target_degree, joint: Joint):
+    target_degree = max(min(target_degree, joint.maxDegree), joint.minDegree)
+    degree_delta = target_degree - joint.currentDegree
+    pulse_delta = int(abs(degree_delta) * joint.degreeToPulseRatio)
+
     if pulse_delta == 0:
         return
-    direction = pulse_delta > 0
-    step_motor(abs(pulse_delta), dirPin1, pulPin1, direction)
-    currentDegree1 = target_degree
-    print(f"Stepper 1 moved to: {currentDegree1}°")
+
+    joint.direction = 1 if degree_delta > 0 else 0
+    joint.steps_remaining = pulse_delta
+    joint.currentDegree = target_degree
+
+    print(f"Stepper scheduled → {joint.currentDegree}° ({pulse_delta} steps)")
 
 
-def move_stepper2(target_degree):
-    global currentDegree2
-    target_degree = max(min(target_degree, maxDegree2), minDegree2)
-    degree_delta = target_degree - currentDegree2
-    pulses_to_move = int(abs(degree_delta) * degreeToPulseRatio2)
-    if pulses_to_move == 0:
-        return
-    direction = degree_delta > 0
-    step_motor(pulses_to_move, dirPin2, pulPin2, direction)
-    currentDegree2 = target_degree
-    print(f"Stepper 2 moved to: {currentDegree2}°")
 
-
-def move_stepper3(target_degree):
-    global currentDegree3
-    target_degree = max(min(target_degree, maxDegree3), minDegree3)
-    degree_delta = target_degree - currentDegree3
-    pulse_delta = int(abs(degree_delta) * pulsesPerDegree3)
-    if pulse_delta == 0:
-        return
-    direction = degree_delta > 0
-    step_motor(pulse_delta, dirPin3, pulPin3, direction)
-    currentDegree3 = target_degree
-    print(f"Stepper 3 moved to: {currentDegree3}°")
-
-
-def gripper_open():
-    set_angle(0)
-    utime.sleep_ms(500)
-
-
-def gripper_close():
-    set_angle(85)
-    utime.sleep_ms(500)
-
-
-def gripper_stop():
-    gripper_ENB.value(0)
-    gripper_IN3.value(0)
-    gripper_IN4.value(0)
-    print("Gripper stopped")
-
-
-def calibrate_steppers():
-    global currentDegree1, currentDegree2, currentDegree3
-
+def calibrate_steppers(joint1: Joint, joint2: Joint, joint3: Joint):
     limit_switch_1 = Pin(4, Pin.IN, Pin.PULL_UP)
     limit_switch_2 = Pin(3, Pin.IN, Pin.PULL_UP)
     limit_switch_3 = Pin(2, Pin.IN, Pin.PULL_UP)
 
-    dirPin1.value(1)
-    dirPin2.value(0)
-    dirPin3.value(1)
-
-    maxDegree1_local = 175.0
-    maxPulse1_local = 3875
-    degreeToPulseRatio2_local = 2625.0 / 90.0
-    degreeToPulseRatio3_local = 2500.0 / 90.0
+    joint1.jointDir(1)
+    joint2.jointDir(0)
+    joint3.jointDir(1)
 
     phase1 = "forward"
     phase2 = "backward"
     phase3 = "backward"
 
-    target_steps_1_back = int(153 / (maxDegree1_local / maxPulse1_local))
-    target_steps_2_forward = int(31 * degreeToPulseRatio2_local)
-    target_steps_3_forward = int(85 * degreeToPulseRatio3_local)
+    target_steps_1_back = int(153 / (joint1.maxDegree / joint1.maxPulse))
+    target_steps_2_forward = int(31 * joint2.degreeToPulseRatio)
+    target_steps_3_forward = int(85 * joint3.degreeToPulseRatio)
 
     steps_1_back_done = steps_2_forward_done = steps_3_forward_done = 0
     done1 = done2 = done3 = False
@@ -251,19 +238,20 @@ def calibrate_steppers():
         if not done1:
             if phase1 == "forward":
                 if limit_switch_1.value() == 1:
-                    dirPin1.value(0)
+                    joint1.jointDir(0)
                     phase1 = "backward"
                     steps_1_back_done = 0
                 elif time.ticks_diff(now, last_step_time_1) >= pulse_delay_1:
-                    pulPin1.value(1)
+                    joint1.jointPul(1)
                     time.sleep_us(delay)
-                    pulPin1.value(0)
+                    joint1.jointPul(0)
                     last_step_time_1 = now
+
             elif phase1 == "backward" and steps_1_back_done < target_steps_1_back:
                 if time.ticks_diff(now, last_step_time_1) >= pulse_delay_1:
-                    pulPin1.value(1)
+                    joint1.jointPul(1)
                     time.sleep_us(delay)
-                    pulPin1.value(0)
+                    joint1.jointPul(0)
                     steps_1_back_done += 1
                     last_step_time_1 = now
             else:
@@ -273,19 +261,19 @@ def calibrate_steppers():
             if phase2 == "backward":
                 if limit_switch_2.value() == 1:
                     print("trigger limit 2")
-                    dirPin2.value(1)
+                    joint2.jointDir(1)
                     phase2 = "forward"
                     steps_2_forward_done = 0
                 elif time.ticks_diff(now, last_step_time_2) >= pulse_delay_2:
-                    pulPin2.value(1)
+                    joint2.jointPul(1)
                     time.sleep_us(delay)
-                    pulPin2.value(0)
+                    joint2.jointPul(0)
                     last_step_time_2 = now
             elif phase2 == "forward" and steps_2_forward_done < target_steps_2_forward:
                 if time.ticks_diff(now, last_step_time_2) >= 400:
-                    pulPin2.value(1)
+                    joint2.jointPul(1)
                     time.sleep_us(delay)
-                    pulPin2.value(0)
+                    joint2.jointPul(0)
                     steps_2_forward_done += 1
                     last_step_time_2 = now
             else:
@@ -294,27 +282,27 @@ def calibrate_steppers():
         if not done3:
             if phase3 == "backward":
                 if limit_switch_3.value() == 1:
-                    dirPin3.value(0)
+                    joint3.jointDir(0)
                     phase3 = "forward"
                     steps_3_forward_done = 0
                 elif time.ticks_diff(now, last_step_time_3) >= pulse_delay_3:
-                    pulPin3.value(1)
+                    joint3.jointPul(1)
                     time.sleep_us(delay)
-                    pulPin3.value(0)
+                    joint3.jointPul(0)
                     last_step_time_3 = now
             elif phase3 == "forward" and steps_3_forward_done < target_steps_3_forward:
                 if time.ticks_diff(now, last_step_time_3) >= 400:
-                    pulPin3.value(1)
+                    joint3.jointPul(1)
                     time.sleep_us(delay)
-                    pulPin3.value(0)
+                    joint3.jointPul(0)
                     steps_3_forward_done += 1
                     last_step_time_3 = now
             else:
                 done3 = True
 
-    currentDegree1 = 0
-    currentDegree2 = 0
-    currentDegree3 = 0
+    joint1.currentDegree = 0
+    joint2.currentDegree = 0
+    joint3.currentDegree = 0
 
     print("✅ Calibration complete!")
 
@@ -336,9 +324,9 @@ def send_response(cl, response):
 
 
 def web_page():
-    s1 = int(currentDegree1)
-    s2 = int(currentDegree2)
-    s3 = int(currentDegree3)
+    s1 = int(joint1.currentDegree)
+    s2 = int(joint2.currentDegree)
+    s3 = int(joint3.currentDegree)
 
     # Updated HTML - removed "stepper" word and reordered sections
     html = f"""<!DOCTYPE html>
@@ -447,30 +435,70 @@ document.getElementById('i'+i).addEventListener('keypress',e=>{{if(e.key==='Ente
 if __name__ == "__main__":
     ap = create_access_point()
 
-    dirPin1 = Pin(9, Pin.OUT)
-    pulPin1 = Pin(11, Pin.OUT)
-    dirPin2 = Pin(7, Pin.OUT)
-    pulPin2 = Pin(13, Pin.OUT)
-    dirPin3 = Pin(14, Pin.OUT)
-    pulPin3 = Pin(15, Pin.OUT)
+    gripper = Gripper()
 
-    gripper_ENB = Pin(5, Pin.OUT)
-    gripper_IN3 = Pin(0, Pin.OUT)
-    gripper_IN4 = Pin(1, Pin.OUT)
+    saved_movement_1 = []
+    saved_movement_2 = []
+
+    # instantiate joints (note: minDegree before maxDegree)
+    joint1 = Joint(dir=9, pulse=11, minDegree=-175, maxDegree=175, maxPulse=3875, degreeToPulseRatio=3875 / 175)
+    joint2 = Joint(dir=7, pulse=13, minDegree=-20, maxDegree=70, maxPulse=3875, degreeToPulseRatio=2625 / 90, delay=800)
+    joint3 = Joint(dir=14, pulse=15, minDegree=-90, maxDegree=90, maxPulse=3875, degreeToPulseRatio=2500 / 90)
 
     addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
     s = socket.socket()
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind(addr)
     s.listen(1)
+
+    # ✅ Make listening socket non-blocking so main loop can keep updating steppers
+    s.setblocking(False)
+
     print(f"Server running on http://{ap.ifconfig()[0]}:80")
 
     while True:
+        # Always run stepper updates each loop iteration (non-blocking)
+        stepper_update(joint1)
+        stepper_update(joint2)
+        stepper_update(joint3)
+
+        # Try accept without blocking; if no client, continue loop and keep stepping
+        cl = None
         try:
-            cl, addr = s.accept()
-            cl.settimeout(5.0)
-            request = cl.recv(1024).decode()
-            path = request.split(' ')[1]
+            cl, client_addr = s.accept()
+        except OSError:
+            cl = None
+
+        if not cl:
+            # short sleep to avoid 100% CPU spin; adjust if needed
+            continue
+
+        # Handle request (client connected)
+        try:
+            cl.settimeout(500)  # ms
+            request = b""
+            try:
+                request = cl.recv(1024)
+            except Exception as e:
+                # if recv failed, close and continue
+                print("recv error:", e)
+                cl.close()
+                continue
+
+            if not request:
+                cl.close()
+                continue
+
+            try:
+                request = request.decode()
+            except:
+                request = str(request)
+
+            parts = request.split(' ')
+            if len(parts) < 2:
+                cl.close()
+                continue
+            path = parts[1]
             print("Request:", path)
 
             # Serve image file
@@ -481,10 +509,8 @@ if __name__ == "__main__":
                         f.seek(0, 2)
                         file_size = f.tell()
                         f.seek(0)
-
-                        header = f'HTTP/1.0 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {file_size}\r\nConnection: close\r\n\r\n'
+                        header = 'HTTP/1.0 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n'.format(file_size)
                         cl.send(header.encode())
-
                         bytes_sent = 0
                         while True:
                             chunk = f.read(1024)
@@ -493,145 +519,124 @@ if __name__ == "__main__":
                             cl.send(chunk)
                             bytes_sent += len(chunk)
                             gc.collect()
-
                         print(f'✓ Image served: {bytes_sent}/{file_size} bytes')
                 except Exception as e:
                     print(f'Image error: {e}')
-                    cl.send(b'HTTP/1.0 404 Not Found\r\n\r\n')
-
+                    try:
+                        cl.send(b'HTTP/1.0 404 Not Found\r\n\r\n')
+                    except:
+                        pass
                 cl.close()
                 continue
 
+            # Stepper control (safe parsing)
             elif path.startswith('/stepper'):
-                parts = path.split('?')[1].split('&')
-                num = float(parts[0].split('=')[1])
-                angle = float(parts[1].split('=')[1])
+                # Example path: /stepper?num=1&angle=45
+                try:
+                    q = path.split('?')[1]
+                    parts_q = q.split('&')
+                    num = int(parts_q[0].split('=')[1])   # ✅ int
+                    angle = float(parts_q[1].split('=')[1])
+                except Exception as e:
+                    print("Bad stepper request:", e)
+                    cl.send(b'HTTP/1.0 400 Bad Request\r\n\r\n')
+                    cl.close()
+                    continue
 
                 if num == 1:
-                    move_stepper1(angle)
+                    move_stepper(angle, joint1)
                 elif num == 2:
                     solve_d3(angle)
-                    move_stepper2(angle)
+                    move_stepper(angle, joint2)
                 elif num == 3:
                     solve_d2(angle)
-                    move_stepper3(angle)
+                    move_stepper(angle, joint3)
 
                 cl.send(b'HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nOK')
                 cl.close()
                 continue
 
-            elif path.startswith('/get_range3'):
-                response = '{{"min":{},"max":{}}}'.format(min_s3, max_s3)
-                cl.send(b'HTTP/1.0 200 OK\r\nContent-type: application/json\r\n\r\n')
-                cl.send(response.encode())
-                cl.close()
-                continue
-
-            elif path.startswith('/get_range2'):
-                response = '{{"min":{},"max":{}}}'.format(min_s2, max_s2)
-                cl.send(b'HTTP/1.0 200 OK\r\nContent-type: application/json\r\n\r\n')
-                cl.send(response.encode())
-                cl.close()
-                continue
-
+            # Gripper
             elif path.startswith('/gripper'):
-                action = path.split('=')[1]
-                if action == 'open':
-                    gripper_open()
-                elif action == 'close':
-                    gripper_close()
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                # expect /gripper?action=open or /gripper?action=close
+                try:
+                    action = path.split('=')[1]
+                except:
+                    action = ''
+                if 'open' in action:
+                    gripper.open()
+                elif 'close' in action:
+                    gripper.close()
+                try:
+                    cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                except:
+                    pass
                 cl.close()
                 continue
 
+            # Calibrate (blocking - keep behavior)
             elif path.startswith('/calibrate'):
-                calibrate_steppers()
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                calibrate_steppers(joint1, joint2, joint3)
+                try:
+                    cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                except:
+                    pass
                 cl.close()
                 continue
 
-            elif path.startswith('/save_movement1'):
-                saved_movement_1 = (currentDegree1, currentDegree2, currentDegree3)
-                print("✅ Saved Movement 1:", saved_movement_1)
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
-                cl.close()
-                continue
-
-            elif path.startswith('/save_movement2'):
-                saved_movement_2 = (currentDegree1, currentDegree2, currentDegree3)
-                print("✅ Saved Movement 2:", saved_movement_2)
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
-                cl.close()
-                continue
-
+            # Run saved sequences
             elif path.startswith('/run1'):
                 if saved_movement_1:
                     print("Running to Position 1...")
-                    move_stepper1(0)
-                    move_stepper2(0)
-                    move_stepper3(0)
+                    move_stepper(0, joint1)
+                    move_stepper(0, joint2)
+                    move_stepper(0, joint3)
                     time.sleep(1)
-                    move_stepper1(saved_movement_1[0])
-                    move_stepper2(saved_movement_1[1])
-                    move_stepper3(saved_movement_1[2])
+                    move_stepper(saved_movement_1[0], joint1)
+                    move_stepper(saved_movement_1[1], joint2)
+                    move_stepper(saved_movement_1[2], joint3)
                     print("✅ Position 1 reached")
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                try:
+                    cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                except:
+                    pass
                 cl.close()
                 continue
 
             elif path.startswith('/run2'):
                 if saved_movement_2:
                     print("Running to Position 2...")
-                    move_stepper1(0)
-                    move_stepper2(0)
-                    move_stepper3(0)
+                    move_stepper(0, joint1)
+                    move_stepper(0, joint2)
+                    move_stepper(0, joint3)
                     time.sleep(1)
-                    move_stepper1(saved_movement_2[0])
-                    move_stepper2(saved_movement_2[1])
-                    move_stepper3(saved_movement_2[2])
+                    move_stepper(saved_movement_2[0], joint1)
+                    move_stepper(saved_movement_2[1], joint2)
+                    move_stepper(saved_movement_2[2], joint3)
                     print("✅ Position 2 reached")
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
-                cl.close()
-                continue
-
-            elif path.startswith('/pickplace'):
-                print("🔄 Pick & Place starting...")
-                gripper_open()
-                move_stepper1(0)
-                move_stepper2(0)
-                move_stepper3(0)
-                time.sleep(1)
-                move_stepper1(defalt_p1[0])
-                move_stepper2(defalt_p1[1])
-                move_stepper3(defalt_p1[2])
-                time.sleep(1)
-                gripper_close()
-                move_stepper1(0)
-                move_stepper2(0)
-                move_stepper3(0)
-                time.sleep(1)
-                move_stepper1(defalt_p2[0])
-                move_stepper2(defalt_p2[1])
-                move_stepper3(defalt_p2[2])
-                time.sleep(1)
-                gripper_open()
-                print("✅ Pick & Place complete")
-                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                try:
+                    cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                except:
+                    pass
                 cl.close()
                 continue
 
             elif path.startswith('/favicon.ico'):
-                cl.send(b'HTTP/1.0 404 Not Found\r\n\r\n')
+                try:
+                    cl.send(b'HTTP/1.0 404 Not Found\r\n\r\n')
+                except:
+                    pass
                 cl.close()
                 continue
 
             # Main page - send in chunks
-            response = web_page()
-            send_response(cl, response)
-            cl.close()
+            else:
+                response = web_page()
+                send_response(cl, response)
+                cl.close()
 
         except Exception as e:
-            print("Error:", e)
+            print("Error handling client:", e)
             try:
                 cl.close()
             except:
