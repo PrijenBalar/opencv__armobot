@@ -441,9 +441,9 @@ if __name__ == "__main__":
     saved_movement_2 = []
 
     # instantiate joints (note: minDegree before maxDegree)
-    joint1 = Joint(dir=9, pulse=11, minDegree=-175, maxDegree=175, maxPulse=3875, degreeToPulseRatio=3875 / 175)
+    joint1 = Joint(dir=9, pulse=11, minDegree=-175, maxDegree=175, maxPulse=3875, degreeToPulseRatio=3875 / 175,delay=600)
     joint2 = Joint(dir=7, pulse=13, minDegree=-20, maxDegree=70, maxPulse=3875, degreeToPulseRatio=2625 / 90, delay=800)
-    joint3 = Joint(dir=14, pulse=15, minDegree=-90, maxDegree=90, maxPulse=3875, degreeToPulseRatio=2500 / 90)
+    joint3 = Joint(dir=14, pulse=15, minDegree=-90, maxDegree=90, maxPulse=3875, degreeToPulseRatio=2500 / 90,delay=600)
 
     addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
     s = socket.socket()
@@ -620,6 +620,41 @@ if __name__ == "__main__":
                     pass
                 cl.close()
                 continue
+
+            elif path.startswith('/current_position'):
+                data = {
+                    "joint1": joint1.currentDegree,
+                    "joint2": joint2.currentDegree,
+                    "joint3": joint3.currentDegree
+                }
+
+                response = json.dumps(data)
+
+                cl.send(b'HTTP/1.0 200 OK\r\n')
+                cl.send(b'Content-Type: application/json\r\n')
+                cl.send(b'Connection: close\r\n\r\n')
+                cl.send(response.encode())
+
+                # print("📍 Current Position:", data)
+
+                cl.close()
+                continue
+
+
+            elif path.startswith('/save_movement1'):
+                saved_movement_1 = (joint1.currentDegree, joint2.currentDegree, joint3.currentDegree)
+                print("✅ Saved Movement 1:", saved_movement_1)
+                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                cl.close()
+                continue
+
+            elif path.startswith('/save_movement2'):
+                saved_movement_2 =(joint1.currentDegree, joint2.currentDegree, joint3.currentDegree)
+                print("✅ Saved Movement 2:", saved_movement_2)
+                cl.send(b'HTTP/1.0 200 OK\r\n\r\nOK')
+                cl.close()
+                continue
+
 
             elif path.startswith('/favicon.ico'):
                 try:
