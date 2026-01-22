@@ -1,6 +1,6 @@
 import requests
 
-
+# url = "http://192.168.4.1/"
 class ArmControl:
     def __init__(self, url = "http://192.168.4.1/"):
         self.base_url = url
@@ -34,9 +34,9 @@ class ArmControl:
         return response
 
     def get_current_position(self):
+        url = self.base_url + "current_position"
+        response = requests.get(url)
+        return response.json()
 
-
-
-
-        requests.post(f"{BASE_URL}/stepper?num=2&angle={angle}", timeout=5)
+    # requests.post(f"{url}/stepper?num=3&angle={30}", timeout=5)
 
