@@ -1,5 +1,18 @@
 import cv2
 import numpy as np
+import time
+
+
+from ArmControl import ArmControl
+arm = ArmControl()
+
+gripper_state = "closed"   # "closed" or "open"\
+shape_start_time = None
+
+time.sleep(5)
+arm.close_gripper()
+print("Gripper is closed")
+
 
 cap = cv2.VideoCapture(0)
 
@@ -7,6 +20,8 @@ while True:
     ret, frame = cap.read()
     if not ret:
         break
+
+    valid_shape_detected = False
 
     # Flip & crop
     frame = cv2.flip(frame, 1)
@@ -76,12 +91,27 @@ while True:
         shape = "Unknown"
 
         # ===== SHAPE LOGIC =====
+        shape = "Unknown"
+
         if circularity > 0.82 and len(approx) > 6:
             shape = "Circle"
         elif len(approx) == 4 and 0.85 <= aspect_ratio <= 1.15 and extent > 0.75:
             shape = "Square"
         elif len(approx) == 4:
             shape = "Rectangle"
+
+        # ===== 3-SECOND STABLE DETECTION LOGIC =====
+        if shape != "Unknown":
+            valid_shape_detected = True
+
+            if gripper_state == "closed":
+                if shape_start_time is None:
+                    shape_start_time = time.time()
+                    print(f"👀 {shape} detected → waiting 1.5 seconds...")
+                elif time.time() - shape_start_time >= 1.5:
+                    print(f"✅ {shape} stable → OPEN gripper")
+                    arm.open_gripper()
+                    gripper_state = "open"
 
         #if shape == "Unknown":
         #    continue
@@ -105,15 +135,28 @@ while True:
         cv2.putText(frame, shape, (cx - 40, cy - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
+    if not valid_shape_detected:
+        shape_start_time = None
+
+        if gripper_state == "open":
+            print("❌ Object lost → CLOSE gripper")
+            arm.close_gripper()
+            gripper_state = "closed"
+
+
     # ===== DISPLAY =====
-    cv2.imshow("White Mask", white_mask)
-    cv2.imshow("Black Mask", black_mask)
-    cv2.imshow("Combined Mask", combined_mask)
-    cv2.imshow("Edges (Debug)", edges)
+    # cv2.imshow("White Mask", white_mask)
+    # cv2.imshow("Black Mask", black_mask)
+    # cv2.imshow("Combined Mask", combined_mask)
+    # cv2.imshow("Edges (Debug)", edges)
     cv2.imshow("Shape Detection", frame)
 
     if cv2.waitKey(1) & 0xFF == 27:
         break
+# ===== CLOSE GRIPPER WHEN OBJECT IS GONE =====
+
+
+
 
 cap.release()
 cv2.destroyAllWindows()
