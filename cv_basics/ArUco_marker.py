@@ -1,12 +1,6 @@
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-import time
-from ArmControl import ArmControl
-arm=ArmControl()
-
-last_pos_time = 0
-POS_INTERVAL = 1   # seconds
 
 
 # ===================== LOAD CAMERA CALIBRATION =====================
@@ -36,19 +30,6 @@ while True:
     ret, frame = cap.read()
     if not ret:
         break
-
-    now = time.time()
-
-    if now - last_pos_time >= POS_INTERVAL:
-        pos = arm.get_current_position()
-        last_pos_time = now
-
-        if pos:
-            print(
-                f"📍 J1:{pos['joint1']}  "
-                f"J2:{pos['joint2']}  "
-                f"J3:{pos['joint3']}"
-            )
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -98,12 +79,12 @@ while True:
                 )
 
                 # ===================== PRINT (FOR ROBOT USE) =====================
-                # print(
-                #     f"Marker {ids[i][0]} -> "
-                #     f"X:{x_mm:.2f} mm, "
-                #     f"Y:{y_mm:.2f} mm, "
-                #     f"Z:{z_mm:.2f} mm"
-                # )
+                print(
+                    f"Marker {ids[i][0]} -> "
+                    f"X:{x_mm:.2f} mm, "
+                    f"Y:{y_mm:.2f} mm, "
+                    f"Z:{z_mm:.2f} mm"
+                )
 
     cv2.imshow("ArUco solvePnP (mm)", frame)
 

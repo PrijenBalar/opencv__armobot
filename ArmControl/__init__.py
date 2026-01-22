@@ -21,10 +21,10 @@ class ArmControl:
         response = requests.get(url)
         return response
 
-    def set_gripper_angle(self, angle):
-        angle = max(0, min(85, angle))
-        url = self.base_url + f"gripper?angle={angle}"
-        return requests.get(url)
+    # def set_gripper_angle(self, angle):
+    #     angle = max(0, min(85, angle))
+    #     url = self.base_url + f"gripper?angle={angle}"
+    #     return requests.get(url)
 
 
     def move_joint(self,num=0,angle=0):
