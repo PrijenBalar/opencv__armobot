@@ -38,5 +38,11 @@ class ArmControl:
         response = requests.get(url)
         return response.json()
 
+    def set_stepper_delay(self,num=0 ,delay=200):
+        end_point = "set_delay?num="+ str(num) +"&delay=" + str(delay)
+        url = self.base_url + end_point
+        response = requests.get(url)
+        return response
+
     # requests.post(f"{url}/stepper?num=3&angle={30}", timeout=5)
 

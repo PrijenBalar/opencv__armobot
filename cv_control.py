@@ -30,16 +30,15 @@ cameras = [
 for arm in arms:
     arm = ArmControl(arm["url"])
     print(arm.base_url)
-    arm.move_joint(1,20)
-    arm.move_joint(2, 23)
-    arm.move_joint(3,25)
+    arm.set_stepper_delay(num=3, delay=2000)
+    arm.move_joint(3, 500)
 
-    time.sleep(1)
-    arm.move_joint(1,-20)
-    arm.move_joint(2, -23)
-    arm.move_joint(3,-25)
+    time.sleep(10)
+    arm.set_stepper_delay(num=3, delay=1000)
+    arm.move_joint(3, 10)
 
-    time.sleep(1)
+
+    time.sleep(10)
 
 
 

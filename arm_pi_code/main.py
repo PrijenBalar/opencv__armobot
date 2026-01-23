@@ -46,7 +46,8 @@ class Gripper:
 
 
 class Joint:
-    def __init__(self, dir, pulse, maxDegree, minDegree, maxPulse, degreeToPulseRatio , delay=delay):
+    def __init__(self,limit_pin, dir, pulse, maxDegree, minDegree, maxPulse, degreeToPulseRatio , delay=delay):
+        self.limit_pin = Pin(limit_pin, Pin.IN, Pin.PULL_UP)
         self.dirPin = Pin(dir, Pin.OUT)
         self.pulsePin = Pin(pulse, Pin.OUT)
         self.maxDegree = maxDegree
@@ -181,15 +182,17 @@ def stepper_update(joint: Joint):
     if joint.steps_remaining <= 0:
         return
 
-    now = time.ticks_us()
-    if time.ticks_diff(now, joint.last_step_time) >= joint.delay:
-        joint.dirPin.value(joint.direction)
-        joint.pulsePin.value(1)
-        time.sleep_us(5)          # tiny pulse width
-        joint.pulsePin.value(0)
+    if joint.limit_pin.value() != 1:
+        now = time.ticks_us()
 
-        joint.steps_remaining -= 1
-        joint.last_step_time = now
+        if time.ticks_diff(now, joint.last_step_time) >= joint.delay:
+            joint.dirPin.value(joint.direction)
+            joint.pulsePin.value(1)
+            time.sleep_us(1)          # tiny pulse width
+            joint.pulsePin.value(0)
+
+            joint.steps_remaining -= 1
+            joint.last_step_time = now
 
 
 def move_stepper(target_degree, joint: Joint):
@@ -229,7 +232,7 @@ def calibrate_steppers(joint1: Joint, joint2: Joint, joint3: Joint):
     done1 = done2 = done3 = False
 
     last_step_time_1 = last_step_time_2 = last_step_time_3 = time.ticks_us()
-    pulse_delay_1 = pulse_delay_2 = pulse_delay_3 = 200
+    pulse_delay_1 = pulse_delay_2 = pulse_delay_3 = 600
 
     print("Calibrating steppers...")
     while not (done1 and done2 and done3):
@@ -441,9 +444,9 @@ if __name__ == "__main__":
     saved_movement_2 = []
 
     # instantiate joints (note: minDegree before maxDegree)
-    joint1 = Joint(dir=9, pulse=11, minDegree=-175, maxDegree=175, maxPulse=3875, degreeToPulseRatio=3875 / 175,delay=600)
-    joint2 = Joint(dir=7, pulse=13, minDegree=-20, maxDegree=70, maxPulse=3875, degreeToPulseRatio=2625 / 90, delay=800)
-    joint3 = Joint(dir=14, pulse=15, minDegree=-90, maxDegree=90, maxPulse=3875, degreeToPulseRatio=2500 / 90,delay=600)
+    joint1 = Joint(limit_pin=4, dir=9, pulse=11, minDegree=-175, maxDegree=175, maxPulse=3875, degreeToPulseRatio=3875 / 175,delay=600)
+    joint2 = Joint(limit_pin=3, dir=7, pulse=13, minDegree=-20, maxDegree=70, maxPulse=3875, degreeToPulseRatio=2625 / 90, delay=800)
+    joint3 = Joint(limit_pin=2, dir=14, pulse=15, minDegree=-90, maxDegree=90, maxPulse=3875, degreeToPulseRatio=2500 / 90,delay=600)
 
     addr = socket.getaddrinfo('0.0.0.0', 80)[0][-1]
     s = socket.socket()
@@ -475,7 +478,7 @@ if __name__ == "__main__":
 
         # Handle request (client connected)
         try:
-            cl.settimeout(500)  # ms
+            cl.settimeout(40)  # ms
             request = b""
             try:
                 request = cl.recv(1024)
@@ -551,6 +554,34 @@ if __name__ == "__main__":
                 elif num == 3:
                     solve_d2(angle)
                     move_stepper(angle, joint3)
+
+                cl.send(b'HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nOK')
+                cl.close()
+                continue
+
+
+            elif path.startswith('/set_delay'):
+                # Example path: /stepper?num=1&angle=45
+                try:
+                    q = path.split('?')[1]
+                    parts_q = q.split('&')
+                    num = int(parts_q[0].split('=')[1])   # ✅ int
+                    delay = float(parts_q[1].split('=')[1])
+                    if delay < 200:
+                        delay = 200
+
+                except Exception as e:
+                    print("Bad stepper request:", e)
+                    cl.send(b'HTTP/1.0 400 Bad Request\r\n\r\n')
+                    cl.close()
+                    continue
+
+                if num == 1:
+                    joint1.delay = delay
+                elif num == 2:
+                    joint2.delay = delay
+                elif num == 3:
+                    joint3.delay = delay
 
                 cl.send(b'HTTP/1.0 200 OK\r\nContent-type: text/plain\r\n\r\nOK')
                 cl.close()
