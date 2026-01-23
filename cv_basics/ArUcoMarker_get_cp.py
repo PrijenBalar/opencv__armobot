@@ -8,7 +8,7 @@ arm = ArmControl()
 
 # ====== TIMING / CONTROL ======
 last_pos_time = 0
-POS_INTERVAL = 0.1  # seconds (10 Hz)
+POS_INTERVAL = 0.5  # seconds (10 Hz)
 
 # ====== MACHINE / CALIBRATION ======
 stepper1 = 6   # mm per degree (base)
@@ -154,11 +154,12 @@ while True:
                 j1_new = j1_cur + d_j1
                 # j1_new = max(-175, min(175, j1_new))
 
+
                 if last_j1_cmd is None or j1_new != last_j1_cmd:
-                    if j1_new < 2:
-                        arm.set_stepper_delay(num=1,delay=2000)
-                    else:
-                        arm.set_stepper_delay(num=1,delay=600)
+                    # if j1_new < 2:
+                    #     arm.set_stepper_delay(num=1,delay=2000)
+                    # else:
+                    #     arm.set_stepper_delay(num=1,delay=600)
 
                     arm.move_joint(1, j1_new)
                     last_j1_cmd = j1_new
@@ -190,10 +191,10 @@ while True:
                 # j3_new = max(-90, min(90, j3_new))
                 # only send if command actually changed (prevents tick-tick when within tolerance)
                 if last_j3_cmd is None or j3_new != last_j3_cmd:
-                    if j3_new < 2:
-                        arm.set_stepper_delay(num=3,delay=2000)
-                    else:
-                        arm.set_stepper_delay(num=3,delay=600)
+                    # if j3_new < 2:
+                    #     arm.set_stepper_delay(num=3,delay=2000)
+                    # else:
+                    #     arm.set_stepper_delay(num=3,delay=600)
 
                     arm.move_joint(3, j3_new)
                     last_j3_cmd = j3_new

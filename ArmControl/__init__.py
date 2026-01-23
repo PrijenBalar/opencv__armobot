@@ -46,3 +46,14 @@ class ArmControl:
 
     # requests.post(f"{url}/stepper?num=3&angle={30}", timeout=5)
 
+print("H")
+
+if __name__ == "__main__":
+
+    class Human:
+        def __init__(self):
+            self.base_url = "http://192.168.4.1/"
+
+    # arm_control = ArmControl()
+    # arm_control.open_gripper()
+    print("G")

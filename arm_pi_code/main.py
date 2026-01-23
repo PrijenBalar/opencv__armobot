@@ -55,6 +55,7 @@ class Joint:
         self.degreeToPulseRatio = degreeToPulseRatio
         self.maxPulse = maxPulse
         self.currentDegree = 0
+        self.currentStep = 0
 
         # 🔹 Non-blocking state
         self.steps_remaining = 0
@@ -89,6 +90,8 @@ min_s2 = -20
 max_s2 = 70
 min_s3 = -90
 max_s3 = 90
+current_position_json = b'{"joint1":0,"joint2":0,"joint3":0}'
+
 
 import math
 from math import cos, sin, atan2, acos
@@ -179,6 +182,9 @@ def create_access_point():
 
 
 def stepper_update(joint: Joint):
+    
+    joint.currentDegree = (joint.currentStep/joint.degreeToPulseRatio)
+    update_position_cache()
     if joint.steps_remaining <= 0:
         return
 
@@ -193,6 +199,11 @@ def stepper_update(joint: Joint):
 
             joint.steps_remaining -= 1
             joint.last_step_time = now
+            
+            if joint.direction:
+                joint.currentStep += 1
+            else:
+                joint.currentStep -= 1
 
 
 def move_stepper(target_degree, joint: Joint):
@@ -205,16 +216,15 @@ def move_stepper(target_degree, joint: Joint):
 
     joint.direction = 1 if degree_delta > 0 else 0
     joint.steps_remaining = pulse_delta
-    joint.currentDegree = target_degree
 
     print(f"Stepper scheduled → {joint.currentDegree}° ({pulse_delta} steps)")
 
 
 
 def calibrate_steppers(joint1: Joint, joint2: Joint, joint3: Joint):
-    limit_switch_1 = Pin(4, Pin.IN, Pin.PULL_UP)
-    limit_switch_2 = Pin(3, Pin.IN, Pin.PULL_UP)
-    limit_switch_3 = Pin(2, Pin.IN, Pin.PULL_UP)
+    limit_switch_1 = joint1.limit_pin
+    limit_switch_2 = joint2.limit_pin
+    limit_switch_3 = joint3.limit_pin
 
     joint1.jointDir(1)
     joint2.jointDir(0)
@@ -324,6 +334,15 @@ def send_response(cl, response):
             time.sleep_ms(10)
     except Exception as e:
         print(f"Send error: {e}")
+
+
+def update_position_cache():
+    global current_position_json
+    current_position_json = (
+        b'{"joint1":%d,"joint2":%d,"joint3":%d}' %
+        (joint1.currentDegree, joint2.currentDegree, joint3.currentDegree)
+    )
+
 
 
 def web_page():
@@ -653,23 +672,17 @@ if __name__ == "__main__":
                 continue
 
             elif path.startswith('/current_position'):
-                data = {
-                    "joint1": joint1.currentDegree,
-                    "joint2": joint2.currentDegree,
-                    "joint3": joint3.currentDegree
-                }
 
-                response = json.dumps(data)
-
-                cl.send(b'HTTP/1.0 200 OK\r\n')
-                cl.send(b'Content-Type: application/json\r\n')
-                cl.send(b'Connection: close\r\n\r\n')
-                cl.send(response.encode())
-
-                # print("📍 Current Position:", data)
+                cl.send(
+                    b'HTTP/1.0 200 OK\r\n'
+                    b'Content-Type: application/json\r\n'
+                    b'Connection: close\r\n\r\n'
+                    + current_position_json
+                )
 
                 cl.close()
                 continue
+
 
 
             elif path.startswith('/save_movement1'):

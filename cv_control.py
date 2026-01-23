@@ -31,16 +31,30 @@ for arm in arms:
     arm = ArmControl(arm["url"])
     print(arm.base_url)
     arm.set_stepper_delay(num=3, delay=2000)
-    arm.move_joint(3, 500)
+    target = 40
+    arm.move_joint(3, target)
 
-    time.sleep(10)
+    done = False
+
+    while not done:
+        pos = arm.get_current_position()  # may raise or return None
+        print(pos)
+        time.sleep(0.3)
+        print(((pos["joint3"]) - target))
+
+        if (abs((pos["joint3"]) - target)) <= 1.1:
+            done = True
+
     arm.set_stepper_delay(num=3, delay=1000)
-    arm.move_joint(3, 10)
+    arm.move_joint(3, -10)
 
 
     time.sleep(10)
 
 
+    # arm.set_stepper_delay(num=1, delay=4000)
+    # arm.set_stepper_delay(num=2, delay=4000)
+    # arm.set_stepper_delay(num=3, delay=4000)
 
 # camvis = []
 # for camera in cameras:
