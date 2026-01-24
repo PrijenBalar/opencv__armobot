@@ -28,6 +28,8 @@ TARGET_MARKER_ID = 19
 
 # ====== persistence to avoid sending same command again ======
 last_j1_cmd = None
+last_j2_cmd = None
+
 last_j3_cmd = None
 
 # ===================== LOAD CAMERA CALIBRATION =====================
@@ -163,6 +165,41 @@ while True:
 
                     arm.move_joint(1, j1_new)
                     last_j1_cmd = j1_new
+
+            dy = ty - ay  # target minus arm (positive = target farther)
+
+            if abs(dy) < DEAD_MM:
+                d_j2 = 0
+            else:
+                # CORRECT SIGN: d_j2 = dz / stepper3  (positive -> move up)
+                d_j2 = -int(dy / stepper2)
+
+                # adaptive limits based on magnitude
+                limit_y = adaptive_limit(dy)
+
+                # kill tiny oscillations
+                if abs(d_j2) < MIN_STEP:
+                    d_j2 = 0
+
+                d_j2 = max(-limit_y, min(limit_y, d_j2))
+
+            if d_j2 == 0:
+                last_j2_cmd = None
+
+            if d_j2 != 0:
+                j2_cur = int(pos['joint2'])
+                j2_new = j2_cur + d_j2
+                # j3_new = max(-90, min(90, j3_new))
+                # only send if command actually changed (prevents tick-tick when within tolerance)
+                if last_j2_cmd is None or j2_new != last_j2_cmd:
+                    # if j3_new < 2:
+                    #     arm.set_stepper_delay(num=3,delay=2000)
+                    # else:
+                    #     arm.set_stepper_delay(num=3,delay=600)
+
+                    arm.move_joint(2, j2_new)
+                    last_j2_cmd = j2_new
+
 
 
             dz = tz - az  # target minus arm (positive = target farther)
