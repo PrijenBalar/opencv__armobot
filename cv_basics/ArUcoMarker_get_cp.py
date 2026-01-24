@@ -238,7 +238,7 @@ while True:
 
             print(
                 f"ARM({int(ax)},{int(ay)},{int(az)}) → TARGET({int(tx)},{int(ty)},{int(tz)}) | "
-                f"dx:{int(dx)} dz:{int(dz)} | dJ1:{d_j1} dJ3:{d_j3}"
+                f"dx:{int(dx)} dy:{int(dy)} dz:{int(dz)} | dJ1:{d_j1} dJ2:{d_j2} dJ3:{d_j3}"
             )
 
     cv2.imshow("ArUco solvePnP (mm)", frame)
