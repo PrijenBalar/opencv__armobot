@@ -34,7 +34,6 @@ TARGET_MARKER_ID = 19
 # ====== persistence to avoid sending same command again ======
 last_j1_cmd = None
 last_j2_cmd = None
-
 last_j3_cmd = None
 
 # ===================== LOAD CAMERA CALIBRATION =====================
@@ -174,8 +173,6 @@ while True:
             # ---------- Y axis (FIXED & STABLE) ----------
 
             dy = (ty - 110) - ay
-
-            # --- hysteresis gate (reverse-safe) ---
             if abs(dy) < Y_DEAD_MM:
                 y_active = False
             elif abs(dy) > Y_RESTART_MM:
@@ -204,7 +201,7 @@ while True:
                     arm.move_joint(2, j2_new)
                     last_j2_cmd = j2_new
 
-            #==================================
+            # ---------- Z axis (FIXED & STABLE) ----------
 
 
             dz = (tz +20) - az  # target minus arm (positive = target farther)
