@@ -121,7 +121,7 @@ def vision_loop(command_queue):
                 command_queue.put(cmd)
 
             print("VISION →", cmd)
-            time.sleep(0.5)
+            #time.sleep(0.5)
 
         cv2.imshow("Vision", frame)
         if cv2.waitKey(1) & 0xFF == 27:
