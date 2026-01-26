@@ -244,6 +244,7 @@ while True:
             )
 
     cv2.imshow("ArUco solvePnP (mm)", frame)
+    time.sleep(0.5)
     if cv2.waitKey(1) & 0xFF == 27:
         break
 
