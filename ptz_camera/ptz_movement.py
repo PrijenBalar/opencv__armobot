@@ -2,7 +2,7 @@ from onvif import ONVIFCamera
 import time
 
 # ================= CAMERA CONFIG =================
-IP = "192.168.1.6"
+IP = "192.168.1.26"
 PORT = 8888                 # ✅ ONVIF PORT (NOT 554, NOT 8888)
 USER = "admin"
 PASS = ""    # ❗ MUST NOT BE EMPTY

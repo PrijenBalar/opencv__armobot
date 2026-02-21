@@ -1,7 +1,7 @@
 import cv2
 import time
 
-RTSP_URL = "rtsp://admin:@192.168.1.6:554/ch0_0.264"
+RTSP_URL = "rtsp://admin:@192.168.1.26:554/ch0_0.264"
 
 cap = cv2.VideoCapture(RTSP_URL, cv2.CAP_FFMPEG)
 

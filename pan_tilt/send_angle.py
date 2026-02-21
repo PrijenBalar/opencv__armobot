@@ -15,11 +15,11 @@ try:
         print(f"Sent: {pan},{tilt}")
 
         pan += 5
-        if pan > 140:
+        if pan > 270:
             pan = 40
 
         tilt += 5
-        if tilt > 140:
+        if tilt > 270:
             tilt = 40
 
         time.sleep(0.5)

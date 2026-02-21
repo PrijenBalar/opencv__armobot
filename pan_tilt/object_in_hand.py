@@ -2,6 +2,23 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from collections import deque
+import serial
+import time
+
+# ---------------- SERIAL ----------------
+ser = serial.Serial('COM6', 9600, timeout=1)
+time.sleep(2)
+print("Connected to Arduino")
+
+pan = 90
+tilt = 90
+last_pan = pan
+last_tilt = tilt
+
+dx = dy = 0
+obj_cx = obj_cy = -1
+ser.write(f"{pan},{tilt}\n".encode())
+
 
 # ================== CONFIG & SMOOTHING ==================
 FRAME_W, FRAME_H = 640, 480
@@ -18,6 +35,8 @@ cap.set(4, FRAME_H)
 
 mp_hands = mp.solutions.hands
 hands = mp_hands.Hands(max_num_hands=1, min_detection_confidence=0.8, min_tracking_confidence=0.8)
+
+
 
 while True:
     ret, frame = cap.read()
@@ -76,20 +95,83 @@ while True:
                 best_c = max(valid_objects, key=cv2.contourArea)
                 ox, oy, ow, oh = cv2.boundingRect(best_c)
 
-                x_buffer.append(ox + ow // 2)
-                y_buffer.append(oy + oh // 2)
+                # ---------------- OBJECT POSITION ----------------
+                obj_raw_x = ox + ow // 2
+                obj_raw_y = oy + oh // 2
+
+                x_buffer.append(obj_raw_x)
+                y_buffer.append(obj_raw_y)
+
                 obj_cx = int(sum(x_buffer) / len(x_buffer))
                 obj_cy = int(sum(y_buffer) / len(y_buffer))
 
                 cv2.rectangle(frame, (ox, oy), (ox + ow, oy + oh), (0, 0, 255), 2)
                 cv2.circle(frame, (obj_cx, obj_cy), 5, (0, 0, 255), -1)
 
-                pan = int(90 + (obj_cx - CENTER_X) * deg_per_pixel_x)
-                tilt = int(90 - (obj_cy - CENTER_Y) * deg_per_pixel_y)
-                cv2.putText(frame, f"P:{pan} T:{tilt}", (10, 30), 0, 0.7, (0, 255, 255), 2)
+                # ---------------- ERROR ----------------
+                dx = obj_cx - CENTER_X
+                dy = obj_cy - CENTER_Y
+
+                DEAD_ZONE = 12
+                if abs(dx) < DEAD_ZONE:
+                    dx = 0
+                if abs(dy) < DEAD_ZONE:
+                    dy = 0
+
+                # ---------------- SERVO CONTROL ----------------
+                GAIN = 0.15
+                MAX_STEP = 2
+
+                pan_before = pan
+                tilt_before = tilt
+
+                pan += dx * deg_per_pixel_x * GAIN
+                tilt -= dy * deg_per_pixel_y * GAIN
+
+                pan = max(last_pan - MAX_STEP, min(last_pan + MAX_STEP, pan))
+                tilt = max(last_tilt - MAX_STEP, min(last_tilt + MAX_STEP, tilt))
+
+                pan = int(max(0, min(180, pan)))
+                tilt = int(max(0, min(180, tilt)))
+
+                # ---------------- SEND ----------------
+                if pan != last_pan or tilt != last_tilt:
+                    cmd = f"{pan},{tilt}"
+                    ser.write((cmd + "\n").encode())
+                    last_pan, last_tilt = pan, tilt
+
+                    print(
+                        f"OBJ=({obj_cx},{obj_cy}) | "
+                        f"ERR=({dx},{dy}) | "
+                        f"PAN:{pan_before}->{pan} | "
+                        f"TILT:{tilt_before}->{tilt}"
+                    )
+                # ----------- HUD (ALWAYS DRAW) -----------
+                y0 = 20
+                step = 22
+
+                cv2.putText(frame, f"Object: ({obj_cx},{obj_cy})", (10, y0),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                cv2.putText(frame, f"Center: ({CENTER_X},{CENTER_Y})", (10, y0 + step),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+                cv2.putText(frame, f"Error dx:{dx} dy:{dy}", (10, y0 + 2 * step),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+                cv2.putText(frame, f"Pan:{pan}  Tilt:{tilt}", (10, y0 + 3 * step),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                cv2.putText(frame, f"Servo Sent:{last_pan},{last_tilt}", (10, y0 + 4 * step),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+
+
+
             else:
                 x_buffer.clear()
                 y_buffer.clear()
+                obj_cx = obj_cy = -1
+                dx = dy = 0
 
     cv2.imshow("Hand & Object Tracker", frame)
     cv2.imshow("Debug: Object Detection", object_mask)
