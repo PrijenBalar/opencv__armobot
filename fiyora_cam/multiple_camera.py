@@ -27,7 +27,8 @@ BUZZER_DELAY = 5.0
 frames = [np.zeros((270, 480, 3), dtype=np.uint8) for _ in RTSP_URLS]
 
 def human_detection(frame):
-    global last_seen , buzzer_on , trigger_time , triggered
+    global last_seen, buzzer_on, trigger_time, triggered
+
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
     lower_green = np.array([40, 80, 80])
@@ -35,48 +36,40 @@ def human_detection(frame):
 
     mask = cv2.inRange(hsv, lower_green, upper_green)
 
-    edges = cv2.Canny(mask, 50, 150)
-
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     detected = False
 
     for cnt in contours:
         area = cv2.contourArea(cnt)
 
-        if area < 1000:
+        if area < 2000:
             continue
 
-        approx = cv2.approxPolyDP(cnt, 0.02 * cv2.arcLength(cnt, True), True)
+        x, y, w, h = cv2.boundingRect(cnt)
+        aspect_ratio = w / float(h)
 
-        if len(approx) == 4:
-            x, y, w, h = cv2.boundingRect(cnt)
+        if 0.3 < aspect_ratio < 3.0:
+            detected = True
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-            aspect_ratio = w / float(h)
-
-            if 0.5 < aspect_ratio < 2.0:
-                detected = True
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
+    # ---- TRIGGER ----
     current_time = time.time()
 
-    # ---------------- TRIGGER ----------------
     if detected:
         last_seen = current_time
 
         if not triggered:
             print("TRIGGER")
             triggered = True
-            trigger_time = current_time
 
         if not buzzer_on:
             try:
-                requests.get(f"http://{PICO_IP}/on", timeout=5)
+                requests.get(f"http://{PICO_IP}/on", timeout=2)
                 buzzer_on = True
             except:
                 print("Pico not reachable")
 
-    # ---------------- STOP ----------------
     else:
         if triggered and (current_time - last_seen > STOP_DELAY):
             print("STOP")
@@ -84,10 +77,11 @@ def human_detection(frame):
 
             if buzzer_on:
                 try:
-                    requests.get(f"http://{PICO_IP}/off", timeout=5)
+                    requests.get(f"http://{PICO_IP}/off", timeout=2)
                     buzzer_on = False
                 except:
                     print("Pico not reachable")
+
 
 
 class CameraThread:
