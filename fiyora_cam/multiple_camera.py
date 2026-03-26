@@ -71,7 +71,7 @@ def human_detection(frame):
 
         if not buzzer_on:
             try:
-                requests.get(f"http://{PICO_IP}/on", timeout=0.2)
+                requests.get(f"http://{PICO_IP}/on", timeout=5)
                 buzzer_on = True
             except:
                 print("Pico not reachable")
