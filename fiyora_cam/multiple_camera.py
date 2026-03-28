@@ -31,7 +31,7 @@ def human_detection(frame):
 
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    lower_green = np.array([40, 80, 80])
+    lower_green = np.array([50, 120, 120])
     upper_green = np.array([80, 255, 255])
 
     mask = cv2.inRange(hsv, lower_green, upper_green)
@@ -65,7 +65,8 @@ def human_detection(frame):
 
         if not buzzer_on:
             try:
-                requests.get(f"http://{PICO_IP}/on", timeout=2)
+                requests.get(f"http://{PICO_IP}/on", timeout=5
+                             )
                 buzzer_on = True
             except:
                 print("Pico not reachable")
